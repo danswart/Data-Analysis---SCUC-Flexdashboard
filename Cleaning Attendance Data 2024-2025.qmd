@@ -1,0 +1,201 @@
+---
+title: "Convert 24-25 Attendance Data from Wide to Long"
+format: html
+---
+
+
+```{r}
+# Weekly Attendance Data Processing Workflow
+# Author: [Your Name]
+# Date: [Current Date]
+
+# Load required libraries
+library(dplyr)
+library(readr)
+library(janitor)
+library(lubridate)
+library(tidyr)
+library(stringr)
+
+```
+
+Import wide CSV file named data/2024-25 Weekly Atten Percentage-WIDE.csv
+
+```{r}
+# Step 1: Import the wide CSV file
+df_wide <- read_csv("data/2024-25 Weekly Atten Percentage-WIDE.csv")
+
+```
+
+Clean names with Janitor()
+
+```{r}
+# Step 2: Clean column names with janitor
+df_clean <- df_wide %>%
+  clean_names()
+
+```
+
+Convert week column to dates with Lubridate()
+
+```{r}
+# Step 3: Convert week column to dates with lubridate (using week ENDING date)
+df_dates <- df_clean %>%
+  mutate(
+    # Extract end date from week range - handle various spacing around dashes
+    end_date_text = str_extract(week, "\\s*-\\s*([A-Za-z]+\\s?\\d+)$"),
+    end_date_text = str_remove(end_date_text, "^\\s*-\\s*"),  # Remove dash and spaces
+    end_date_text = str_replace_all(end_date_text, "\\s", ""),  # Remove remaining spaces
+    
+    # Convert to actual date (assuming 2024-2025 school year)
+    week_date = mdy(paste0(end_date_text, ", 2024")),
+    
+    # Handle year transition (Jan-May are 2025)
+    week_date = case_when(
+      month(week_date) %in% 1:7 ~ week_date + years(1),
+      TRUE ~ week_date
+    )
+  ) %>%
+  select(-end_date_text) %>%  # Remove helper column
+  select(week = week_date, everything(), -week)  # Replace original week column
+
+
+```
+
+Convert all values from 99.50 to 0.9950 
+
+```{r}
+# Step 4: Convert all percentage values from 99.50 to 0.9950
+df_converted <- df_dates %>%
+  mutate(
+    # Convert all numeric columns (except week_date) from percentage to decimal
+    across(where(is.numeric) & !matches("week"), ~ .x / 100)
+  )
+
+```
+
+Pivot longer with values going into a column named 'Pct'
+
+```{r}
+# Step 5: Pivot longer with values going into 'pct' column
+df_long <- df_converted %>%
+  pivot_longer(
+    cols = -week,                    # Keep week column, pivot everything else
+    names_to = "campus",             # Campus names go to 'campus' column
+    values_to = "pct"                # Values go to 'pct' column
+  ) %>%
+  mutate(
+    metric = "attend"                # Add metric column (all attendance)
+  ) %>%
+  select(week, campus, metric, pct) %>%  # Reorder columns as requested
+  arrange(week, campus)                  # Sort by week, then campus
+
+```
+
+Inspect the result
+
+```{r}
+# Step 6: View the final result
+glimpse(df_long)
+
+```
+
+Preview first several lines
+
+```{r}
+
+# Optional: Preview first few rows
+head(df_long, 20)
+
+```
+
+
+Save the file in LONG format
+
+```{r}
+# Optional: Save the processed data
+write_csv(df_long, "data/2024-25_weekly_attendance-LONG.csv")
+
+```
+
+
+Example line plot for one campus using intermediate objects
+
+```{r}
+# Campus A Attendance Line Plot Workflow
+library(dplyr)
+library(ggplot2)
+
+# Step 1: Filter for just Campus A (assuming your tidy data is in df_long)
+campus_a_data <- df_long %>%
+  filter(campus == "b_steele")  # Use exact name from your data
+
+# Step 2: Create line plot
+campus_a_plot <- campus_a_data %>%
+  ggplot(aes(x = week, y = pct)) +
+  geom_line(color = "blue", size = 1.2) +
+  geom_point(color = "darkblue", size = 2) +  # Add points for clarity
+  scale_y_continuous(
+    labels = scales::percent_format(),  # Show as percentages
+    limits = c(0.85, 1.0)  # Adjust range as needed
+  ) +
+  scale_x_date(
+    date_breaks = "2 weeks",  # Tick marks every 2 weeks
+    date_labels = "%b %d"     # Format: Aug 16, Sep 02, etc.
+  ) +
+  labs(
+    title = "Campus A Weekly Attendance",
+    subtitle = "2024-2025 School Year",
+    x = "Week Ending Date",
+    y = "Attendance Rate"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate date labels
+    plot.title = element_text(size = 14, face = "bold")
+  )
+
+# Step 3: Display the plot
+print(campus_a_plot)
+
+# Optional: Save the plot
+# ggsave("plots/campus_a_attendance.png", 
+#        plot = campus_a_plot, 
+#        width = 10, height = 6, dpi = 300)
+
+
+```
+
+Now plot with one pipeline; no intermediate objects
+
+```{r}
+
+# Alternative: One-liner approach (no intermediate objects)
+df_long %>%
+  filter(campus == "b_steele") %>%
+  ggplot(aes(x = week, y = pct)) +
+  geom_line(color = "blue", size = 1.2) +
+  geom_point(color = "darkblue", size = 2) +
+  scale_y_continuous(
+    labels = scales::percent_format(),  # Show as percentages
+    limits = c(0.85, 1.0)  # Adjust range as needed
+  ) +
+  scale_x_date(
+    date_breaks = "2 weeks",  # Tick marks every 2 weeks
+    date_labels = "%b %d"     # Format: Aug 16, Sep 02, etc.
+  ) +
+  labs(title = "Campus A Weekly Attendance", 
+       subtitle = "2024-2025 School Year",
+       x = "Week Ending Date", 
+       y = "Attendance Rate") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate date labels
+    plot.title = element_text(size = 14, face = "bold")
+  )
+
+```
+
+
+
+

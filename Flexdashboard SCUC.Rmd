@@ -3,7 +3,7 @@ title: "Flexdashboard SCUC Data Analysis"
 author: "Dan Swart"
 output: 
   flexdashboard::flex_dashboard:
-    css: swart-20250327.css
+    css: swart.css
     orientation: columns
     vertical_layout: fill
     includes:
